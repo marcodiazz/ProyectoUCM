@@ -1,0 +1,9 @@
+streamlit
+openai
+langchain
+faiss-cpu
+pandas
+crawl4ai
+pydantic
+dotenv
+langchain-openai
