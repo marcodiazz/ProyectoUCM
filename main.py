@@ -24,20 +24,34 @@ async def get_job_links(search_url: str, limit: int = 10) -> list[str]:
         result = await crawler.arun(
             url=search_url,
             extraction_strategy=JsonCssExtractionStrategy(
-                selector="a",  # Extraemos todos los links
+                selector="h2 a[href*='/of-']",  # Selector afinado para enlaces de ofertas
                 attributes=["href"],
                 schema={"href": "str"}  # <-- Añadido schema requerido
             ),
             config=CrawlerRunConfig(
                exclude_external_images=True,
-
             )
         )
-        raw_links = json.loads(result.extracted_content)
+        if not result or not getattr(result, "extracted_content", None):
+            print(f"[ERROR] No se extrajo contenido de {search_url}. Resultado: {result}")
+            return []
+        try:
+            raw_links = json.loads(result.extracted_content)
+        except Exception as e:
+            print(f"[ERROR] Fallo al parsear JSON de {search_url}: {e}\nContenido: {result.extracted_content}")
+            return []
         urls = [link["href"] for link in raw_links if "/of-" in link["href"]]
-        # Filtra duplicados, limita cantidad, completa enlaces relativos
-        urls = list(set(urls))
-        full_urls = ["https://www.infojobs.net" + url if url.startswith("/") else url for url in urls]
+        # Normaliza los enlaces
+        def normalize(url):
+            if url.startswith("//"):  # Enlaces tipo //www.infojobs.net/...
+                return "https:" + url
+            elif url.startswith("/"):
+                return "https://www.infojobs.net" + url
+            elif url.startswith("http"):
+                return url
+            else:
+                return "https://www.infojobs.net/" + url
+        full_urls = list({normalize(url) for url in urls})
         return full_urls[:limit]
 
 
@@ -52,7 +66,23 @@ async def scrape_offer(url: str):
                     api_token=os.getenv("AZURE_OPENAI_API_KEY"),
                     schema=JobOffer.model_json_schema(),
                     extraction_type="schema",
-                    instruction="Extrae los campos definidos de esta oferta de empleo: título, empresa, descripción, ubicación, requisitos, tecnologías, salario y modalidad.",
+                    instruction="""
+                    Extrae los campos definidos de esta oferta de empleo: título, empresa, descripción, ubicación, requisitos, tecnologías, salario y modalidad.
+                    Utiliza el siguiente formato JSON:
+                    {
+                        "title": "Título de la oferta",
+                        "company": "Nombre de la empresa",
+                        "description": "Descripción del puesto",
+                        "location": "Ubicación de la oferta",
+                        "requirements": "Requisitos del puesto",
+                        "technologies": "Tecnologías mencionadas",
+                        "salary": "Salario ofrecido",
+                        "modality": "Modalidad (remoto, presencial, híbrido)"
+                    }
+                    Devuelve un JSON con los campos requeridos.
+                    Si algún campo no está presente, déjalo vacío.
+                    Si el salario es un rango, usa el valor medio. No incluyas la moneda, solo el número.
+                    """,
                 ),
                 config=CrawlerRunConfig(
                     exclude_selectors=["script", "style", "svg", "iframe"],
@@ -68,10 +98,10 @@ async def scrape_offer(url: str):
 # PASO 3: Controlador principal
 async def main():
     # URL de búsqueda (puedes cambiar la keyword)
-    search_url = "https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword=cientifico+de+datos"
+    search_url = "https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword=ingeniero+de+software"
 
     print("📥 Obteniendo enlaces de ofertas...")
-    offer_links = await get_job_links(search_url, limit=10)
+    offer_links = await get_job_links(search_url, limit=100)
     print(f"🔗 {len(offer_links)} enlaces encontrados")
 
     print("🤖 Haciendo scraping de cada oferta con LLM...")

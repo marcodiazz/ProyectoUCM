@@ -6,6 +6,8 @@ from crawl4ai import AsyncWebCrawler, CacheMode, CrawlResult, CrawlerRunConfig, 
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
 from pydantic import BaseModel
 import csv
+from dotenv import load_dotenv
+load_dotenv()
 
 # Esquema para la página de listado de ofertas
 schema = {
@@ -305,7 +307,23 @@ async def extract_offer_info_return_dict(target_url: str):
         ),
         schema=JobOffer.model_json_schema(),
         extraction_type="schema",
-        instruction="""Extract from this job offer the following fields: { title (string), company (string), description (string), location (string), requirements (list[string]), technologies (list[string]), salary (string), modality (string), languages (list[string]), contract_type (string) }. The output should be a valid JSON object with these fields. If any field is not present, it should be set to an empty string or an empty list as appropriate.""",
+        instruction="""Extrae los campos definidos de esta oferta de empleo: título, empresa, descripción, ubicación, requisitos, tecnologías, salario y modalidad.
+                    Utiliza el siguiente formato JSON:
+                        "title": "Título de la oferta",
+                        "company": "Nombre de la empresa",
+                        "description": "Descripción del puesto",
+                        "location": "Ubicación de la oferta",
+                        "requirements": "Requisitos del puesto",
+                        "technologies": "Tecnologías mencionadas",
+                        "salary": "Salario ofrecido",
+                        "modality": "Modalidad (remoto, presencial, híbrido)",
+                        "languages": "Idiomas requeridos",
+                        "contract_type": "Tipo de contrato"
+                    }
+                    Devuelve un JSON con los campos requeridos.
+                    Si algún campo no está presente, déjalo vacío.
+                    Si el salario es un rango, usa el valor medio. No incluyas la moneda, solo el número.
+                    """,
         chunk_token_threshold=1200,
         overlap_rate=0.1,
         apply_chunking=True,
@@ -336,4 +354,4 @@ if __name__ == "__main__":
     url = "https://www.infojobs.net/madrid/ingeniero-software/of-i64a87a0eb948dd8bc2f4858b574610?applicationOrigin=search-new&page=1&sortBy=RELEVANCE"
     # asyncio.run(extract_offer_info(url))
     # Para lanzar el flujo completo y guardar en CSV:
-    asyncio.run(extract_all_offers_to_csv(num_pages=1, csv_filename="ofertas_infojobs_llm.csv"))
+    asyncio.run(extract_all_offers_to_csv(num_pages=10, csv_filename="ofertas_infojobs_llm.csv"))
