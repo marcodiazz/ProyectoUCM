@@ -1,50 +1,58 @@
-import streamlit as st
-import pandas as pd
-import os
-import matplotlib.pyplot as plt
+# ==============================================================================
+# IMPORTS Y CONFIGURACIÓN INICIAL
+# ==============================================================================
+import streamlit as st  # Framework para apps web interactivas en Python
+import pandas as pd  # Manipulación de datos
+import os  # Acceso a variables de entorno y sistema
+import matplotlib.pyplot as plt  # Visualización de datos
 
-from langchain.text_splitter import CharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import CharacterTextSplitter  # División de texto para LLM
+from langchain_openai import OpenAIEmbeddings  # Embeddings de OpenAI
+from langchain_community.vectorstores import FAISS  # Almacenamiento vectorial
 # --- LCEL pipeline ---
 from langchain_core.runnables import RunnablePassthrough
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 
-from langchain_community.chat_models import ChatOpenAI
-from dotenv import load_dotenv
-import openai
-import traceback
+from langchain_community.chat_models import ChatOpenAI  # Modelos de chat de OpenAI
+from dotenv import load_dotenv  # Carga variables de entorno desde .env
+import openai  # Cliente OpenAI
+import traceback  # Manejo de errores y trazas
 
-load_dotenv()
+load_dotenv()  # Cargar variables de entorno (como la API Key)
 
 # ------------------------------------------------------------------------------
-# Carga de API Key
+# Carga de API Key desde variable de entorno
 # ------------------------------------------------------------------------------
 openai_api_key = os.getenv("OPENAI_API_KEY")  # o directamente:
 # openai_api_key = "<TU_API_KEY>"
 
-
 # ------------------------------------------------------------------------------
-# Aplicacion Streamlit
+# Configuración de la aplicación Streamlit
 # ------------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Chat with CSV",
-    page_icon=":bar_chart:",
-    layout="centered",
+    page_title="Chat with CSV",  # Título de la pestaña
+    page_icon=":bar_chart:",    # Icono de la pestaña
+    layout="centered",          # Layout centrado
 )
-st.title("Pregunta a tu CSV con IA 📊")
-
-# st.sidebar.write("Sube un CSV para analizar y preguntar")
+st.title("Chat with your CSV 📊")  # Título principal de la app
 
 # ------------------------------------------------------------------------------
 # Carga de CSV
 # ------------------------------------------------------------------------------
-st.badge("Sube tu archivo CSV", color="red")
-file = st.file_uploader("Sube tu csv", type=["csv"], label_visibility="collapsed")
 
+st.badge("Sube tu archivo CSV", color="red")  # Badge de aviso
+file = st.file_uploader("Sube tu csv", type=["csv"], label_visibility="collapsed")  # Subida de archivo
+
+# ------------------------------------------------------------------------------
+# Función para filtrar columnas relevantes usando LLM
+# ------------------------------------------------------------------------------
 def filter_columns_llm(query, columns):
+    """
+    Dada una pregunta del usuario y las columnas del dataset,
+    usa un LLM para seleccionar solo las columnas relevantes para responder la pregunta.
+    """
     print("Filtrando columnas relevantes para la pregunta:", query)
     print("Columnas disponibles:", columns)
     prompt = (
@@ -66,8 +74,8 @@ def filter_columns_llm(query, columns):
             {"role": "system", "content": "Eres un asistente experto en análisis de datos. Tu tarea es seleccionar las columnas más relevantes de un dataset CSV para responder a preguntas del usuario. No des explicaciones, solo devuelve los nombres de las columnas."},
             {"role": "user", "content": prompt}
         ],
-        max_tokens=50,
-        temperature=0
+        max_tokens=150,
+        temperature=0.1
     )
     content = response.choices[0].message.content.strip()
     cols = [col.strip() for col in content.split(",") if col.strip() in columns]
@@ -75,8 +83,11 @@ def filter_columns_llm(query, columns):
         cols = list(columns)
     return cols
 
+# ------------------------------------------------------------------------------
+# Función para clasificar la pregunta del usuario (TEXTO o GRAFICA)
+# ------------------------------------------------------------------------------
 def classify_query(query):
-    """"Clasifica la pregunta del usuario para determinar el tipo de consulta. Puede ser una pregunta que se responde con texto, o una que requiere una gráfica."""
+    """Clasifica la pregunta del usuario para determinar el tipo de consulta: TEXTO o GRAFICA."""
     print("Clasificando la pregunta:", query)
     prompt = (
         f"""
@@ -120,10 +131,15 @@ def classify_query(query):
     print("✅ Clasificación de la pregunta:", result)
     return result.upper() if result else "TEXTO"
 
+# ------------------------------------------------------------------------------
+# Función para generar y mostrar una gráfica relevante usando IA
+# ------------------------------------------------------------------------------
 def plot_graph(df_filtrado, query):
+    """
+    Genera el código Python necesario para crear una gráfica relevante según la pregunta del usuario,
+    ejecuta el código y muestra la gráfica en Streamlit.
+    """
     code = None
-    if not code:
-        st.info("Generando gráfica relevante con IA...")
     # Pedir al modelo que genere el código Python para la gráfica
     prompt_code = f"""
         Eres un experto en análisis de datos con Python y pandas.
@@ -149,11 +165,14 @@ def plot_graph(df_filtrado, query):
         temperature=0.2
     )
     code = response_code.choices[0].message.content.strip()
+    
     # Eliminar bloques de markdown (```python, ```, etc.)
     code = code.replace('```python', '').replace('```', '').strip()
     code = code.replace('df[', 'df_filtrado[').replace('df.', 'df_filtrado.')
+    
     # Eliminar importaciones innecesarias y comentarios
     code_lines = [line for line in code.splitlines() if 'import matplotlib' not in line and not line.strip().startswith('#')]
+    
     # Eliminar líneas vacías al inicio y final
     while code_lines and code_lines[0].strip() == '':
         code_lines.pop(0)
@@ -161,20 +180,24 @@ def plot_graph(df_filtrado, query):
         code_lines.pop()
     code = '\n'.join(code_lines)
     try:
-
         plt.close('all')  # Cierra figuras previas
         fig = plt.figure()
         # Ejecutar el código generado
         exec(code, {"plt": plt, "df_filtrado": df_filtrado, "pd": pd})
         # Captura la figura activa
         st.pyplot(plt.gcf())
-        
     except Exception as e:
         tb = traceback.format_exc()
         st.error(f"Error al generar la gráfica: {e}\n\nCódigo generado:\n{code}\n\nTraceback:\n{tb}")
 
+# ------------------------------------------------------------------------------
+# Función para combinar múltiples respuestas de la IA en una sola
+# ------------------------------------------------------------------------------
 def combine_responses(responses, query):
-    """Combina múltiples respuestas mediante una llamada a la IA"""
+    """
+    Combina varias respuestas generadas por el modelo LLM en una sola respuesta final,
+    resumiendo y seleccionando lo más relevante.
+    """
     prompt = f"""
         Eres un asistente experto en análisis de datos. Combina las siguientes respuestas de un modelo llm en una sola, ofreciendo un resumen claro y conciso, teniendo en cuenta la pregunta
             Pregunta: {query}
@@ -193,53 +216,61 @@ def combine_responses(responses, query):
     )
     return response.choices[0].message.content.strip()
 
+# ------------------------------------------------------------------------------
+# Función para responder preguntas de texto sobre el DataFrame
+# ------------------------------------------------------------------------------
 def text_answer(df_filtrado, query):
+    """
+    Divide el DataFrame en partes pequeñas y pregunta a la IA por cada parte,
+    luego combina las respuestas en una sola respuesta final y la muestra en Streamlit.
+    """
     response = None
     if not response:
-        st.info("Respondiendo a la pregunta con IA...")
-    # Nueva lógica: dividir el DataFrame en partes pequeñas (por ejemplo, de 40 en 40 filas)
-    chunk_size = 40
+        status_placeholder = st.empty()
+        progress_bar = st.progress(0.0)
+    # Nueva lógica: dividir el DataFrame en partes pequeñas (por ejemplo, de 66 en 66 filas)
+    chunk_size = 65
     respuestas = []
     total = len(df_filtrado)
-    with st.spinner('Razonando la respuesta... 🧠'):
-        for start in range(0, total, chunk_size):
-            print(f"Procesando chunk de {start} a {start + chunk_size} de {total} registros")
-            progress = st.progress(0.0)
-            end = min(start + chunk_size, total)
-            progress.progress(min((end) / total, 1.0))
-            end = min(start + chunk_size, total)
-            sub_df = df_filtrado.iloc[start:end]
-            docs = [f"Registro {i+start}: " + row.to_json() for i, row in sub_df.iterrows()]
-            context = "\n".join(docs)
-            prompt = f"""
-            Eres un asistente experto en análisis de datos. Responde de forma clara, pero dando explicaciones amables. Razona con detenimiento las respuestas. Siempre ofrece los resultados formateados, y lo más bonito posible. Sugiere preguntas de seguimiento interesantes sobre los datos, para obtener los insights más relevantes.\n
-            Pregunta: {query}\nContexto:\n{context}
-            """
-            try:
-                client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": "Eres un asistente experto en análisis de datos."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=1000,
-                    temperature=0.2
-                )
-                content = response.choices[0].message.content.strip()
-                respuestas.append(content)
-            except Exception as e:
-                respuestas.append(f"[Error procesando chunk: {e}]")
-        # respuesta_final = "\n\n".join(respuestas)
-        final_answer = combine_responses(respuestas, query)
-        st.markdown(f"""
-            <div style='background: #fff; border-radius: 12px; padding: 20px; margin-top: 20px; box-shadow: 8px 8px 0px #1c1c1c; border: 2px solid #1c1c1c;'>{final_answer}
-            </div>
-        """, unsafe_allow_html=True) 
+    for start in range(0, total, chunk_size):
+        end = min(start + chunk_size, total)
+        status_placeholder.info(f"Procesando chunk {start+1} a {end} de {total} registros")
+        progress_bar.progress(min((end) / total, 1.0))
+        sub_df = df_filtrado.iloc[start:end]
+        docs = [f"Registro {i+start}: " + row.to_json() for i, row in sub_df.iterrows()]
+        context = "\n".join(docs)
+        prompt = f"""
+        Eres un asistente experto en análisis de datos. Responde de forma clara, pero dando explicaciones amables. Razona con detenimiento las respuestas. Siempre ofrece los resultados formateados, y lo más bonito posible. Sugiere preguntas de seguimiento interesantes sobre los datos, para obtener los insights más relevantes.\n
+        Pregunta: {query}\nContexto:\n{context}
+        """
+        try:
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "Eres un asistente experto en análisis de datos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1000,
+                temperature=0.2
+            )
+            content = response.choices[0].message.content.strip()
+            respuestas.append(content)
+        except Exception as e:
+            respuestas.append(f"[Error procesando chunk: {e}]")
+    final_answer = combine_responses(respuestas, query)
+    status_placeholder.empty()
+    progress_bar.empty()
+    st.markdown(f"""
+        <div style='background: #fff; border-radius: 12px; padding: 20px; margin-top: 20px; box-shadow: 8px 8px 0px #1c1c1c; border: 2px solid #1c1c1c;'>{final_answer}
+        </div>
+    """, unsafe_allow_html=True) 
 
-
+# ------------------------------------------------------------------------------
+# Lógica principal de la app: carga de archivo, pregunta y respuesta
+# ------------------------------------------------------------------------------
 if file is not None:
-    df = pd.read_csv(file, delimiter=";", encoding="utf-8")
+    df = pd.read_csv(file, delimiter=";", encoding="utf-8")  # Cargar CSV
     st.write("Vista previa de tus datos")
     st.write(df)
 
