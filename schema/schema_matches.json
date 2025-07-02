@@ -1,0 +1,71 @@
+{
+  "name": "Wimbledon Match Schedule",
+  "baseSelector": ".schedule-court",
+  "baseFields": [
+    {
+      "name": "court",
+      "selector": "[data-court]",
+      "type": "attribute",
+      "attribute": "data-court"
+    },
+    {
+      "name": "date_time",
+      "selector": ".courtName",
+      "type": "text"
+    }
+  ],
+  "fields": [
+    {
+      "name": "event_type",
+      "selector": ".match-info .event",
+      "type": "text"
+    },
+    {
+      "name": "round",
+      "selector": ".match-info .round",
+      "type": "text"
+    },
+    {
+      "name": "matches",
+      "type": "list",
+      "selector": ".match",
+      "fields": [
+        {
+          "name": "player1",
+          "selector": ".schedule-team:nth-child(1) .schedule-player .name",
+          "type": "text"
+        },
+        {
+          "name": "player1_nation",
+          "selector": ".schedule-team:nth-child(1) .schedule-player .nation",
+          "type": "text"
+        },
+        {
+          "name": "player1_seed",
+          "selector": ".schedule-team:nth-child(1) .schedule-player .seed",
+          "type": "text"
+        },
+        {
+          "name": "player2",
+          "selector": ".schedule-team:nth-child(2) .schedule-player .name",
+          "type": "text"
+        },
+        {
+          "name": "player2_nation",
+          "selector": ".schedule-team:nth-child(2) .schedule-player .nation",
+          "type": "text"
+        },
+        {
+          "name": "player2_seed",
+          "selector": ".schedule-team:nth-child(2) .schedule-player .seed",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "selector": ".status",
+      "type": "text"
+    }
+  ]
+}

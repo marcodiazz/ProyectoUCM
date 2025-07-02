@@ -48,7 +48,7 @@ class JobOffer(BaseModel):
 
 async def get_offer_links(keyword="ingeniero software", location="madrid", pages=1):
     base_url = f"https://www.infojobs.net/jobsearch/search-results/list.xhtml?keyword={keyword}+{location}&page={{}}"
-    links = []
+    links = [] 
 
     async with AsyncWebCrawler() as crawler:
         for page in range(1, pages + 1):

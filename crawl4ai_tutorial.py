@@ -22,8 +22,8 @@ async def main():
         html=court_html_schema,
         llm_config=llm_config,
         query="""From https://www.wimbledon.com/en_GB/scores/schedule/index.html, extract the match schedule from the Wimbledon page. 
-        For each match, provide the following fields in the schema: date, time, court, event_type, match, result (result of the match), and status (status of the match). 
-        If there are doubles, include all player names in the list.
+        For each match, provide the following fields in the schema: date, time, court, event_type, matches (an array containing each match, with the player and result of each match), and status (status of the match). 
+        If there are doubles, include both player names in the match.
         """,
     )
     
@@ -73,7 +73,7 @@ async def main():
       
         # for result in results:
         result = results[0]
-        print("Contenido sin filtrar", result.markdown.raw_markdown)
+        print("Contenido sin filtrar", len(result.markdown.raw_markdown))
         print("Length del contenido filtrado", len(result.markdown.fit_markdown))   
         data = json.loads(result.extracted_content)
         print("Datos extraídos:")
